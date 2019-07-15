@@ -1,0 +1,597 @@
+import time
+import datetime
+import random
+from collections import Counter
+
+
+# Card's value mapping
+# For the use of fixed cards
+value_mapping = {
+     1: 13,
+    13: 12,
+    12: 11,
+    11: 10,
+    10:  9,
+     9:  8,
+     8:  7,
+     7:  6,
+     6:  5,
+     5:  4,
+     4:  3,
+     3:  2,
+     2:  1,
+}
+
+
+# Inverse card's value mapping
+# For the use of printing
+inverse_value_mapping = dict(zip(value_mapping.values(), value_mapping.keys()))
+
+
+#  Hand's type mapping
+hand_type_mapping = {
+    1: '   High Card   ',
+    2: '   One Pair    ',
+    3: '   Two Pair    ',
+    4: '     Trips     ',
+    5: '   Straight    ',
+    6: '     Flush     ',
+    7: '  Full House   ',
+    8: '     Quads     ',
+    9: 'Straight Flush ',
+   10: '  Royal Flush  '
+}
+
+
+# Return a new deck of cards (這部分的程式只要一開始執行一次，將結果存成一個global物件)
+def Poker_cards_generator():
+    cards = [n for n in range(52,0,-1)]
+    value = [[n%13] if n%13 != 0 else [13] for n in cards]
+    suit = [[1] if n<14 else [2] if n<27 else [3] if n<40 else [4] for n in cards]
+    poker_cards = [ value[i] + suit[i] for i in range(52) ]
+    return poker_cards
+
+
+# Return a list of players' cards in another form (  [ [Card's values], [Card's suits] ]  )
+def Players_cards_2(players_cards):
+    n_row = len(players_cards)
+    players_cards_2 = [ [[], []] for i in range(n_row) ]
+    for i in range(n_row):
+        players_cards_2[i][0] = [card[0] for card in players_cards[i]]
+        players_cards_2[i][1] = [card[1] for card in players_cards[i]]
+    return players_cards_2
+
+
+# Return a sorted hand matrix from players_hand (sorted by Type + Value)
+def Sorted_hands(players_hand):
+    sorted_hands = sorted(players_hand, key = lambda x: x[0]+x[1], reverse = 1)
+    return sorted_hands
+
+
+## Return m players' biggest hand card in matrix form (m × n) ※m=2~9; n=5~7
+## The matrix form = [ [t, hand(5 cards), [hole cards, f]], o ] ※t is hand card type; o is player's order; f is boolean of flush
+def Players_hand(players_cards_2):
+    players_hand = []
+    for i in range(len(players_cards_2)):
+        players_hand.append(Big_hand(players_cards_2[i]))
+        ## Suited hole cards or offsuit!
+        if players_cards_2[i][1][0] == players_cards_2[i][1][1]:
+            suit = 1
+        else:
+            suit = 0      
+        hole_cards = [players_cards_2[i][0][0], players_cards_2[i][0][1], suit]
+        hole_cards.sort(reverse = 1)
+        players_hand[i].append(hole_cards)
+        ## Each of player's order information!
+        players_hand[i].append(i+1)
+    return players_hand
+
+
+## players_cards_2 = [[11, 10, 11, 12, 13, 1, 1],[2,1,2,2,3,2,2]] ---> [ [values], [suits] ]
+## Return [ [t, the biggest hand] ] in the 5~7 cards　※t is hand type
+def Big_hand(players_cards_2):
+    p_matrix = flush_test(players_cards_2)
+    p_values = p_matrix[0]
+    p_flush = p_matrix[1]
+    values_set = sorted(list(set(p_values)), reverse=1)
+    len_values_set = len(values_set)
+    t = [0]
+    hand = [t]
+    ##---------------------------- Do Straight_test ------------------------------
+    if len_values_set >= 5:
+        for i in range(0, len_values_set-4):
+            if values_set[i]-4 == values_set[i+4]:
+                ## Straight(5), Straight flush(9), or Royal flush(10)
+                if p_flush == 0:
+                    t[0] = 5
+                elif p_flush == 6:
+                    if values_set[i] != 13:
+                        t[0] = 9
+                    else:
+                        t[0] = 10
+                hand = [ hand[0] + [values_set[i+j] for j in range(5)] ]
+                return hand
+        if values_set[0] == 13 and values_set[-1] == 1 and values_set[-4] == 4:
+            ## [5,4,3,2,A] Straight(5) or Straight flush(9)
+            if p_flush == 0:
+                    t[0] = 5
+            elif p_flush == 6:
+                    t[0] = 9
+            hand = [ hand[0] + [4, 3, 2, 1, 13] ]
+            return hand
+        ## Flush(6)
+        if p_flush == 6:
+            t[0] = 6
+            hand = [ hand[0] + [values_set[i] for i in range(5)] ]
+        else:
+            hand = No_straight_hand(p_values)
+        return hand
+    else:         
+        hand = No_straight_hand(p_values)
+        return hand
+
+
+## players_cards_2 = [[11, 10, 11, 12, 13, 1, 1],[2,1,2,2,3,2,2]] ---> [ [values], [suits] ]
+## 
+## Return [ [Flush card's values], 6 ] if thre is a flush in the 5~7 cards
+## Return [ [Original card's values], 0 ] if no flush is in the 5~7 cards
+def flush_test(players_cards_2):
+    p_matrix = [list()]
+    p_values = players_cards_2[0]
+    p_suit = players_cards_2[1]
+    most_suit = Counter(p_suit).most_common(n=1)
+    c_suit = most_suit[0][0]
+    n_suit = most_suit[0][1]
+    if n_suit >= 5:
+        for i in range(len(p_suit)):
+            if p_suit[i] == c_suit:
+                p_matrix[0].append(p_values[i])
+        p_matrix.append(6)
+    else:
+        p_matrix[0] = p_values
+        p_matrix.append(0)
+    return p_matrix
+
+
+## Return the biggest hand if no straight is in the 5~7 cards
+## Return [ [t, the biggest hand] ] in the 5~7 cards　※t is hand type
+def No_straight_hand(p_values):
+    sorted_p = sorted(p_values, reverse=1)
+    value_count = Counter(sorted_p).most_common()
+    t = [0]
+    hand = [t]
+    ## High Card(1)
+    if value_count[0][1] == 1:
+        t[0] = 1
+        hand = [ hand[0] + [value_count[i][0] for i in range(5)] ]
+    ## One pair(2)     
+    elif value_count[0][1] == 2 and value_count[1][1] == 1:
+        t[0] = 2
+        hand = [ hand[0] + [value_count[0][0] for i in range(2)] + \
+                           [value_count[i][0] for i in range(1,4)]   ]
+    ## Two pair(3)
+    elif value_count[0][1] == 2 and value_count[1][1] == 2:
+        t[0] = 3
+        for i in range(0, 2):
+            for j in range(2):
+                hand[0].append(value_count[i][0])
+                sorted_p.remove(value_count[i][0])
+        hand[0].append(max(sorted_p))
+    ## Trips(4)   
+    elif value_count[0][1] == 3 and value_count[1][1] == 1:
+        t[0] = 4
+        hand = [ hand[0] + [value_count[0][0] for i in range(3)] + \
+                           [value_count[i][0] for i in range(1,3)]   ]
+    ## Full house(7)   
+    elif value_count[0][1] == 3 and value_count[1][1] >= 2:
+        t[0] = 7
+        hand = [ hand[0] + [value_count[0][0] for i in range(3)] + \
+                           [value_count[1][0] for i in range(2)]     ]
+    ## Quads(8)   
+    elif value_count[0][1] == 4:
+        t[0] = 8
+        for i in range(4):
+            hand[0].append(value_count[0][0])
+            sorted_p.remove(value_count[0][0])
+        hand[0].append(max(sorted_p))
+    return hand
+
+
+# For the convenience of computing (將不同階段拿到的底牌或公牌轉換成方便計算的數字; EX: 1=>13, 13=>12, ...3=>2, 2=>1)
+def Values_mapping(stage):
+    if stage == 0:
+        hole_card_1[0] = value_mapping[hole_card_1[0]]
+        hole_card_2[0] = value_mapping[hole_card_2[0]]
+    elif stage == 1:
+        flop_card_1[0] = value_mapping[flop_card_1[0]]
+        flop_card_2[0] = value_mapping[flop_card_2[0]]
+        flop_card_3[0] = value_mapping[flop_card_3[0]]
+    elif stage == 2:
+        turn_card[0] = value_mapping[turn_card[0]]
+    elif stage == 3:
+        river_card[0] = value_mapping[river_card[0]]
+
+
+# Return a list of card combinations which depends on hole cards or community cards.       
+# Return a list of 1226 different card combinations at preflop  ※1226 = 50*49/2 + 1 (輸出1226種全部底牌組合)
+def Card_combinations(poker_cards, hole_card_1, hole_card_2):
+    poker_cards.remove(hole_card_1)
+    poker_cards.remove(hole_card_2)
+    cards_number = len(poker_cards)
+    starting_hand = sorted([hole_card_1]+[hole_card_2], reverse = 1)
+    card_combinations = [starting_hand]
+    for i in range(cards_number):
+        for j in range(i+1, cards_number):
+            starting_hand = sorted([poker_cards[i]]+[poker_cards[j]], reverse = 1)
+            card_combinations.append(starting_hand)
+    card_combinations.sort(key = lambda x: x[0][0]+x[1][0], reverse = 1)
+    return card_combinations
+
+    
+# Return a list of 1082 different card combinations at flop  ※1082 = 47*46/2 + 1
+def Flop_card_combinations():
+    poker_cards = new_poker_cards.copy()
+    poker_cards.remove(flop_card_1)
+    poker_cards.remove(flop_card_2)
+    poker_cards.remove(flop_card_3)
+    flop_card_combinations = Card_combinations(poker_cards, hole_card_1, hole_card_2)
+    for i in range(len(flop_card_combinations)):
+        flop_card_combinations[i] += [flop_card_1]
+        flop_card_combinations[i] += [flop_card_2]
+        flop_card_combinations[i] += [flop_card_3]
+    return flop_card_combinations
+
+
+# Return a list of 1036 different card combinations at turn  ※1036 = 46*45/2 + 1
+def Turn_card_combinations():
+    poker_cards = new_poker_cards.copy()
+    poker_cards.remove(flop_card_1)
+    poker_cards.remove(flop_card_2)
+    poker_cards.remove(flop_card_3)
+    poker_cards.remove(turn_card)
+    turn_card_combinations = Card_combinations(poker_cards, hole_card_1, hole_card_2)
+    for i in range(len(turn_card_combinations)):
+        turn_card_combinations[i] += [flop_card_1]
+        turn_card_combinations[i] += [flop_card_2]
+        turn_card_combinations[i] += [flop_card_3]
+        turn_card_combinations[i] += [turn_card]
+    return turn_card_combinations
+
+
+# Return a list of 991 different card combinations at river  ※991 = 45*44/2 + 1 
+def River_card_combinations():
+    poker_cards = new_poker_cards.copy()
+    poker_cards.remove(flop_card_1)
+    poker_cards.remove(flop_card_2)
+    poker_cards.remove(flop_card_3)
+    poker_cards.remove(turn_card)
+    poker_cards.remove(river_card)
+    river_card_combinations = Card_combinations(poker_cards, hole_card_1, hole_card_2)
+    for i in range(len(river_card_combinations)):
+        river_card_combinations[i] += [flop_card_1]
+        river_card_combinations[i] += [flop_card_2]
+        river_card_combinations[i] += [flop_card_3]
+        river_card_combinations[i] += [turn_card]
+        river_card_combinations[i] += [river_card]
+    return river_card_combinations
+
+
+# Build hand rankings information in the range of [Na, Nb] 
+def Hand_rankings(Na, Nb):
+    real_sorted_hands = [ [ [], [], 0 ] for i in range(Nb) ]
+    for i in range(Nb):
+        real_sorted_hands[i][0].append(hand_type_mapping[sorted_hands[i][0][0]])
+        for j in range(1, len(sorted_hands[i][0])):
+            a = inverse_value_mapping[sorted_hands[i][0][j]]
+            real_sorted_hands[i][0].append(a)
+        for k in range(len(sorted_hands[i][1])-1):
+            a = inverse_value_mapping[sorted_hands[i][1][k]]
+            real_sorted_hands[i][1].append(a)
+        real_sorted_hands[i][1].append(sorted_hands[i][1][2])
+        real_sorted_hands[i][2] = sorted_hands[i][2]
+
+    Total_N = len(sorted_hands)
+    counter = 1
+    counter_2 = 0
+    tem = 0
+    global hand_range
+    hand_range = []
+    for N in range(Na, Nb):
+
+        counter_2 += 1
+        if real_sorted_hands[N][0] != real_sorted_hands[N-1][0]:
+            tem = 1
+                
+        if real_sorted_hands[N][1][0] == real_sorted_hands[N-1][1][0]:
+            if real_sorted_hands[N][1][1] == real_sorted_hands[N-1][1][1]:
+                counter += 1
+                continue
+        
+        hand_range.append([N, 1-(N-counter_2)/Total_N, counter, real_sorted_hands[N-counter], N-counter_2+1])
+        counter = 1
+        
+        if tem == 1:
+            counter_2 = 0
+            tem = 0
+            
+    hand_range.append([Nb, 1-(Nb-counter_2-1)/Total_N, counter, real_sorted_hands[Nb-1], N-counter_2+1 ])
+
+
+## Print my hand's Rank and PR(Percentile Rank) at each stage
+def Print_my_hand(N):
+    if N == 1:
+        if hole_card_1 > hole_card_2:
+            my_hand_order = flop_card_combinations.index([hole_card_1]+[hole_card_2]+[flop_card_1]+[flop_card_2]+[flop_card_3])
+        else:
+            my_hand_order = flop_card_combinations.index([hole_card_2]+[hole_card_1]+[flop_card_1]+[flop_card_2]+[flop_card_3])
+    elif N == 2:
+        if hole_card_1 > hole_card_2:
+            my_hand_order = turn_card_combinations.index([hole_card_1]+[hole_card_2]+[flop_card_1]+[flop_card_2]+[flop_card_3]+[turn_card])
+        else:
+            my_hand_order = turn_card_combinations.index([hole_card_2]+[hole_card_1]+[flop_card_1]+[flop_card_2]+[flop_card_3]+[turn_card])
+    elif N == 3:
+        if hole_card_1 > hole_card_2:
+            my_hand_order = river_card_combinations.index([hole_card_1]+[hole_card_2]+[flop_card_1]+[flop_card_2]+[flop_card_3]+[turn_card]+[river_card])
+        else:
+            my_hand_order = river_card_combinations.index([hole_card_2]+[hole_card_1]+[flop_card_1]+[flop_card_2]+[flop_card_3]+[turn_card]+[river_card])
+    my_hand_number = sorted_hands.index(players_hand[my_hand_order]) + 1
+    Hand_rankings(1, len(sorted_hands))
+
+    print(" ")
+    print(sayings[11])
+    print(" ")
+    print(" =====================================================================================================")
+    print("｜Sum of｜Hole ｜            ｜           ｜     Hand     ｜                      ｜                 ｜")
+    print("｜Hole  ｜Cards｜ Hole Cards ｜ Hand Rank ｜  Percentile  ｜         Hand         ｜    Hand Type    ｜")
+    print("｜Cards ｜Qty  ｜            ｜           ｜     Rank     ｜                      ｜                 ｜")
+    print(" =====================================================================================================")
+    # 1.底牌和 2.底牌數 3.底牌 4.手牌RK 5.手牌PR 6.手牌 7.手牌類型
+    for i in hand_range:
+        String_hand_info = "｜ %4d ｜ #%2d ｜  (%2r,%2r)   ｜ RK: %4d  ｜  PR: %5.1f   ｜   {%2r,%2r,%2r,%2r,%2r}   ｜%r｜"
+        print(String_hand_info %(i[0], i[2], i[3][1][0], i[3][1][1],
+                                 i[4], i[1]*100,
+                                 i[3][0][1], i[3][0][2], i[3][0][3], i[3][0][4], i[3][0][5],
+                                 i[3][0][0])
+              )
+        if i[0] < my_hand_number:
+            continue
+        else:
+            my_hand_PR = i[1]
+            my_hand_RK = i[4]
+            break
+    print(" =====================================================================================================")
+
+    print(" ")
+    if N == 1:
+        print(" In flop stage:")
+    elif N == 2:
+        print(" In turn stage:")
+    elif N == 3:
+        print(" In river stage:")
+    print(" My hand's Rank = %d/%d and Percentile Rank = %.1f％" %(my_hand_RK, hand_range[-1][4], my_hand_PR*100) )
+    print(" ")
+    print(sayings[9])
+
+
+def Flop_analysis():
+    global flop_card_combinations, players_hand, sorted_hands
+    flop_card_combinations = Flop_card_combinations()
+    players_cards_2 = Players_cards_2(flop_card_combinations)
+    players_hand = Players_hand(players_cards_2)
+    sorted_hands = Sorted_hands(players_hand)
+    Print_my_hand(1)
+
+
+def Turn_analysis():
+    global turn_card_combinations, players_hand, sorted_hands
+    turn_card_combinations = Turn_card_combinations()
+    players_cards_2 = Players_cards_2(turn_card_combinations)
+    players_hand = Players_hand(players_cards_2)
+    sorted_hands = Sorted_hands(players_hand)
+    Print_my_hand(2)
+
+
+def River_analysis():
+    global river_card_combinations, players_hand, sorted_hands
+    river_card_combinations = River_card_combinations()
+    players_cards_2 = Players_cards_2(river_card_combinations)
+    players_hand = Players_hand(players_cards_2)
+    sorted_hands = Sorted_hands(players_hand)
+    Print_my_hand(3)
+
+
+sayings = {
+    1: "Hole card 1: ", 
+    2: "Hole card 2: ",
+    3: "Flop card 1: ",
+    4: "Flop card 2: ",
+    5: "Flop card 3: ",
+    6: "Turn card: ",
+    7: "River card: ",
+    8: "(♠=1, ♥=2, ♦=3, ♣=4): ",
+    9: "-------------------------------------------------------------------------------------------------------",
+   10: "=======================================================================================================",
+   11: "------------------------- Informtion about Poker Hand Rankings above my hand --------------------------",
+}
+
+
+suit_mapping = {
+    1: "♠",
+    2: "♥",
+    3: "♦",
+    4: "♣"
+}
+
+
+card_value = {
+   13: "A",
+   12: "K",
+   11: "Q",
+   10: "J",
+    9: "T",
+    8: "9",
+    7: "8",
+    6: "7",
+    5: "6",
+    4: "5",
+    3: "4",
+    2: "3",
+    1: "2"
+}
+
+
+def Print_whole_cards(stage):
+    tem = whole_cards
+    if stage == 0:
+        my_cards = " Pre-flop: "
+        real_whole_cards = [ suit_mapping[tem[i][1]] + card_value[tem[i][0]]  for i in range(2) ]
+    elif stage == 1:
+        Print_whole_cards(0)
+        my_cards = "     Flop: "
+        real_whole_cards = [ suit_mapping[tem[i][1]] + card_value[tem[i][0]]  for i in range(5) ]
+    elif stage == 2:
+        Print_whole_cards(1)
+        my_cards = "     Turn: "
+        real_whole_cards = [ suit_mapping[tem[i][1]] + card_value[tem[i][0]]  for i in range(6) ]
+    elif stage == 3:
+        Print_whole_cards(2)
+        my_cards = "    River: "
+        real_whole_cards = [ suit_mapping[tem[i][1]] + card_value[tem[i][0]]  for i in range(7) ]
+    for card in real_whole_cards:
+        my_cards += card + " " 
+    print(my_cards)
+
+
+def key_in_card(saying):
+    def rekey_in_value():
+        rekey_saying = "Please rekey your " + saying
+        return int(input(rekey_saying)) 
+    def rekey_in_suit():
+        rekey_saying = "Please rekey its suit " + saying
+        return int(input(rekey_saying))
+    if saying != sayings[8]:
+        number = int(input(saying))
+        while number < 0 or number > 13:
+            number = rekey_in_value()
+        return number
+    else:
+        number = int(input(saying))
+        while number < 0 or number > 4:
+            number = rekey_in_suit()
+        return number
+
+
+# Global Variables
+hole_card_1 = [1, 1]
+hole_card_2 = [13, 2]
+flop_card_1 = [12, 3]
+flop_card_2 = [11, 4]
+flop_card_3 = [10, 1]
+turn_card = [9, 2]
+river_card = [8, 3]
+whole_cards = [ hole_card_1, hole_card_2, flop_card_1, flop_card_2,
+                flop_card_3,   turn_card,  river_card               ]
+new_poker_cards = Poker_cards_generator()
+preflop_card_combinations = []
+counter = 0
+
+    
+while True :
+    counter += 1
+    poker_cards = new_poker_cards.copy()
+    print(sayings[10])
+    print(" ")
+    print("# Game: %d " %(counter))
+    print(" ")
+    print(sayings[10])
+    print(" ")
+    # Pre-flop Stage ----------------------------------------------------------------------------------
+    number = key_in_card(sayings[1])
+    if number == 0:
+        continue
+    hole_card_1[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    hole_card_1[1] = number
+    print(" ")
+    number = key_in_card(sayings[2])
+    if number == 0:
+        continue
+    hole_card_2[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    hole_card_2[1] = number
+    print(" ")
+    Values_mapping(0)
+    preflop_card_combinations = Card_combinations(poker_cards, hole_card_1, hole_card_2)
+    # Flop Stage --------------------------------------------------------------------------------------
+    number = key_in_card(sayings[3])
+    if number == 0:
+        continue
+    flop_card_1[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    flop_card_1[1] = number
+    print(" ")
+    number = key_in_card(sayings[4])
+    if number == 0:
+        continue
+    flop_card_2[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    flop_card_2[1] = number
+    print(" ")
+    number = key_in_card(sayings[5])
+    if number == 0:
+        continue
+    flop_card_3[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    flop_card_3[1] = number
+    print(" ")
+    Values_mapping(1)
+    Flop_analysis()
+    Print_whole_cards(1)
+    print(" ")
+    print(sayings[9])
+    print(" ")
+    # Turn Stage --------------------------------------------------------------------------------------
+    number = key_in_card(sayings[6])
+    if number == 0:
+        continue
+    turn_card[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    turn_card[1] = number
+    print(" ")
+    Values_mapping(2)
+    Turn_analysis()
+    Print_whole_cards(2)
+    print(" ")
+    print(sayings[9])
+    print(" ")
+    # River Stage -------------------------------------------------------------------------------------
+    number = key_in_card(sayings[7])
+    if number == 0:
+        continue
+    river_card[0] = number
+    number = key_in_card(sayings[8])
+    if number == 0:
+        continue
+    river_card[1] = number
+    print(" ")
+    Values_mapping(3)
+    River_analysis()
+    Print_whole_cards(3)
+    print(" ")
+    print(sayings[9])
+    print(" ")
+
+    
+
